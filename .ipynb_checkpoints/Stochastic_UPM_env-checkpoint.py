@@ -160,10 +160,8 @@ class Processor:
         self.setup_time = SET_UP_TIME[self.previous_type - 1][order.type - 1] if self.previous_type != 0 else 0
         self.process_time = min(ALLOWANCE_FACTOR*order.process_time,np.random.exponential(order.process_time))
         self.available_t = self.env.now + self.setup_time + self.process_time
-        
-        if self.fac.is_warm == False:
-            self.fac.compute_reward(self.env.now, self.setup_time+self.process_time, order)
-            
+
+        self.fac.compute_reward(self.env.now, self.setup_time+self.process_time, order)
         self.env.process(self.setup_processor(order))
     
     def setup_processor(self, order):
