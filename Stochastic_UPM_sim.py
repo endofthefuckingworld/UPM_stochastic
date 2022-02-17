@@ -11,7 +11,7 @@ plt.style.use("seaborn")
 
 N_PROCESSORS = 5
 
-UTILIZATION = 0.8
+UTILIZATION = 0.9
 
 N_TYPES = 5
 
@@ -19,16 +19,16 @@ TYPE_PROB = np.ones(N_TYPES)/N_TYPES
 
 PROCESS_T = [36,20,25,42,31]
 
-ALLOWANCE_FACTOR = 2.5
+ALLOWANCE_FACTOR = 2.0
 
 ARRIVAL_T = np.mean(PROCESS_T)/(UTILIZATION*N_PROCESSORS)
 
 #determine setup_time by job_type
-SET_UP_TIME = np.array([[0,4,2,3,9],
-                        [6,0,3,4,6],
-                        [5,1,0,8,5],
-                        [5,8,6,0,7],
-                        [8,2,4,6,0]])
+SET_UP_TIME = np.array([[0,2,1,2,5],
+                        [3,0,2,2,3],
+                        [3,1,0,4,3],
+                        [3,4,3,0,4],
+                        [4,1,2,3,0]])
 
 WEIGHTS = np.ones(N_TYPES)
 
@@ -235,7 +235,7 @@ class Sink:
         if order.is_delay == True:
             self.number_of_late[order.type - 1] += 1
         
-        if self.input >= TARGET_OUTPUT:
+        if self.input >= TARGET_OUTPUT and self.fac.is_warm == False:
             self.fac.terminal.succeed()
             
         self.warehouse.append(order)
@@ -295,7 +295,7 @@ class W_calculator:
         
 
 class Factory:
-    def build(self):  
+    def build(self, dp_rule):  
         self.env = simpy.Environment()
         self.n_processor_1 = N_PROCESSORS
         self.queue_1 = Queue(self, QUEUE_MAX_CONTENT, 'queue_1')
@@ -303,6 +303,7 @@ class Factory:
         self.source = Source('source_1', self)
         self.sink = Sink(self)
         self.dispatcher = Dispatcher(self)
+        self.dispatcher.action = dp_rule
         
         self.source.set_port(self.queue_1)
         self.queue_1.set_port(self.processors_1)
@@ -325,12 +326,13 @@ class Factory:
     
     def warm_up(self, warm_up_time):
         self.dispatcher.action = 6 #FIFO
+        self.is_warm = True
         self.env.run(until = warm_up_time)
-        self.terminal = self.env.event()
+        self.is_warm = False
         wip = self.L.L_now
         self.L.reset(self.env.now,wip)
         self.W = W_calculator()
-        self.sink.intput = 0
+        self.sink.input = 0
         self.sink.warehouse = []
         self.sink.number_of_late = np.zeros(N_TYPES)
         for p in self.processors_1:
@@ -339,7 +341,7 @@ class Factory:
             else:
                 p.utilization.reset(self.env.now,0)
 
-
+"""
 UPM = Factory()
 performance = np.zeros((30,7))
 for i in range(30):
@@ -350,18 +352,13 @@ for i in range(30):
         performance[i,j] = np.sum(UPM.sink.number_of_late)/UPM.sink.input
 
 pd.DataFrame(performance,columns=['SPT','EDD','MST','ST','CR','WSPT','FIFO']).to_csv('dp_rule.csv')
-"""
+
 UPM = Factory()
-UPM.build()
-UPM.warm_up(600)
+UPM.build(6)
+UPM.warm_up(10080)
 UPM.dispatcher.action = 6
 UPM.env.run(until = UPM.terminal)
-print('--------------end simulation--------------')
 UPM.L.change(UPM.env.now, 0)
-print('Tardy jobs:', UPM.sink.number_of_late)
-print('Tardy jobs percentage:',np.sum(UPM.sink.number_of_late)/UPM.sink.input)
-print('WIP:', round(UPM.L.caculate_mean(),2))
-print('Mean Waiting Time:', round(UPM.W.mean_waiting_time,2))
 for p in UPM.processors_1:
     p.utilization.change(UPM.env.now, 0)
     print('Processor:{} utilization:{}'.format(p.id, round(p.utilization.caculate_mean(),2)))

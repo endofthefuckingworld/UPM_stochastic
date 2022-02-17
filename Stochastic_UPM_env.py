@@ -12,7 +12,7 @@ plt.style.use("seaborn")
 
 N_PROCESSORS = 5
 
-UTILIZATION = 0.8
+UTILIZATION = 0.9
 
 N_TYPES = 5
 
@@ -20,20 +20,20 @@ TYPE_PROB = np.ones(N_TYPES)/N_TYPES
 
 PROCESS_T = [36,20,25,42,31]
 
-ALLOWANCE_FACTOR = 2.5
+ALLOWANCE_FACTOR = 2.0
 
 ARRIVAL_T = np.mean(PROCESS_T)/(UTILIZATION*N_PROCESSORS)
 
 #determine setup_time by job_type
-SET_UP_TIME = np.array([[0,4,2,3,9],
-                        [6,0,3,4,6],
-                        [5,1,0,8,5],
-                        [5,8,6,0,7],
-                        [8,2,4,6,0]])
+SET_UP_TIME = np.array([[0,2,1,2,5],
+                        [3,0,2,2,3],
+                        [3,1,0,4,3],
+                        [3,4,3,0,4],
+                        [4,1,2,3,0]])
 
 WEIGHTS = np.ones(N_TYPES)
 
-QUEUE_MAX_CONTENT = 40
+QUEUE_MAX_CONTENT = 20
 
 TARGET_OUTPUT = 200
 
@@ -212,7 +212,7 @@ class Sink:
         if order.is_delay == True:
             self.number_of_late[order.type - 1] += 1
         
-        if self.input >= TARGET_OUTPUT:
+        if self.input >= TARGET_OUTPUT and self.fac.is_warm == False:
             self.fac.terminal.succeed()
             self.fac.decision_epoch = True
             
@@ -284,6 +284,9 @@ class W_calculator:
         
 
 class Factory:
+    def __init__(self, warm_up_time):
+        self.warm_up_time = warm_up_time
+        
     def build(self):  
         self.env = simpy.Environment()
         self.n_processor_1 = N_PROCESSORS
@@ -325,11 +328,10 @@ class Factory:
         self.is_warm = True
         self.dispatcher.action = 6 #FIFO
         self.env.run(until = warm_up_time)
-        self.terminal = self.env.event()
         wip = self.L.L_now
         self.L.reset(self.env.now,wip)
         self.W = W_calculator()
-        self.sink.intput = 0
+        self.sink.input = 0
         self.sink.warehouse = []
         self.sink.number_of_late = np.zeros(N_TYPES)
         for p in self.processors_1:
@@ -340,7 +342,7 @@ class Factory:
 
     def reset(self):
         self.build()
-        self.warm_up(600)
+        self.warm_up(self.warm_up_time)
         self.is_warm = False
         while not self.decision_epoch:
             self.next_event()
